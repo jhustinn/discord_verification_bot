@@ -233,19 +233,25 @@ async function processVerification(message) {
     const targetPath = `${user.id}-${Date.now()}.${fileExtension}`;
 
     // 2. Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('verification-attachments')
-      .upload(targetPath, imageResponse.data, {
+      .upload(targetPath, Buffer.from(imageResponse.data), {
         contentType: attachment.contentType,
         upsert: true
       });
 
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+    console.log('[Upload] Success:', uploadData);
 
-    // 3. Get public URL
-    const { data: urlData } = supabase.storage
+    // 3. Get public URL (v1 API)
+    const { publicURL, error: urlError } = supabase.storage
       .from('verification-attachments')
       .getPublicUrl(targetPath);
+
+    if (urlError) throw new Error(`Get URL failed: ${urlError.message}`);
+    console.log('[URL] Public URL:', publicURL);
+
+    if (!publicURL) throw new Error('Public URL is null');
 
     // 4. Upsert user record
     const { error: userError } = await supabase
@@ -265,7 +271,7 @@ async function processVerification(message) {
       .insert({
         user_id: user.id,
         in_game_name: inGameName,
-        permanent_image_url: urlData.publicUrl
+        permanent_image_url: publicURL
       });
 
     if (ticketError) throw new Error(`Ticket insert failed: ${ticketError.message}`);
@@ -277,7 +283,7 @@ async function processVerification(message) {
       .setDescription(
         'Your verification data has been stored successfully.\n\n' +
         `**In-Game Name:** ${inGameName}\n` +
-        `**Screenshot:** [View File](${urlData.publicUrl})\n` +
+        `**Screenshot:** [View File](${publicURL})\n` +
         `**Status:** PENDING\n\n` +
         'A moderator will review your submission shortly.'
       )
