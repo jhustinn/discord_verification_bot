@@ -8,11 +8,11 @@
     "dev": "node index.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
+    "@supabase/supabase-js": "^1.35.7",
     "axios": "^1.7.0",
     "discord.js": "^14.16.0",
     "dotenv": "^16.4.0",
-    "express": "^4.21.0",
-    "ws": "^8.21.1"
+    "express": "^4.21.0"
   }
+}
 }
