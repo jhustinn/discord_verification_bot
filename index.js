@@ -17,7 +17,10 @@ const axios = require('axios');
 const express = require('express');
 
 // ─── Supabase Client ──────────────────────────────────────────────────────────
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const WebSocket = require('ws');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
+  realtime: { WebSocket }
+});
 
 // ─── Discord Client ───────────────────────────────────────────────────────────
 const client = new Client({
