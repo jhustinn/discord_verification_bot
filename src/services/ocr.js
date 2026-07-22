@@ -88,10 +88,15 @@ function parseText(text) {
       const clanTag = bracketNameMatch[1].trim();
       let rawName = bracketNameMatch[2].trim();
       
+      // Only take the FIRST word (before space or parenthesis)
+      // This handles cases like "LEGACΨ (LEGACY)" -> "LEGACΨ"
+      rawName = rawName.split(/\s+/)[0];
+      rawName = rawName.split(/\(/)[0];
+      rawName = rawName.split(/\[/)[0];
+      
       // Remove trailing artifacts but preserve special characters
-      rawName = rawName.replace(/\s*[#]\d*\s*$/, '').trim();
-      // Remove trailing brackets/parens that are OCR artifacts
-      rawName = rawName.replace(/\s*[\[\]\(\)]+\s*$/, '').trim();
+      rawName = rawName.replace(/[#]\d*$/g, '').trim();
+      rawName = rawName.replace(/[\[\]\(\)]+$/g, '').trim();
       
       // Skip UI elements
       const skipWords = ['Back', 'Title', 'Level', 'Showcase', 'Academy', 'STATISTICS', 'ACHIEVEMENTS'];
