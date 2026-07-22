@@ -39,11 +39,10 @@ async function processImageOCR(imageBuffer) {
 
     // Convert buffer to base64
     const base64Image = imageBuffer.toString('base64');
-    const dataUri = `data:image/png;base64,${base64Image}`;
 
     // Prepare form data
     const formData = new URLSearchParams();
-    formData.append('base64Image', dataUri);
+    formData.append('base64Image', 'data:image/png;base64,' + base64Image);
     formData.append('language', 'eng');
     formData.append('isOverlayRequired', 'false');
     formData.append('OCREngine', '2');
@@ -53,7 +52,8 @@ async function processImageOCR(imageBuffer) {
       formData.toString(),
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'apikey': 'helloworld' // Free API key for testing
         }
       }
     );
