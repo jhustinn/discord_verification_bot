@@ -31,7 +31,7 @@ function getVerificationPanel() {
       '4. Wait for confirmation\n\n' +
       'Your screenshot will be stored permanently for audit purposes.'
     )
-    .setFooter({ text: 'Verification System v1.0' })
+    .setFooter({ text: 'Verification System v2.0.0' })
     .setTimestamp();
 
   const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
