@@ -1,5 +1,5 @@
 // ─── Input Sanitization ──────────────────────────────────────────────────────
-const MAX_LENGTH =50;
+const MAX_LENGTH = 50;
 
 function sanitizeInput(input) {
   if (!input || typeof input !== 'string') return '';
@@ -15,8 +15,9 @@ function sanitizeInput(input) {
 function sanitizePlayerName(name) {
   if (!name || typeof name !== 'string') return null;
   
+  // Preserve Unicode characters, only remove specific artifacts
   const sanitized = name
-    .replace(/[#\[\]\(\)]/g, '') // Remove brackets and hash
+    .replace(/[#]\d*$/g, '') // Remove trailing #number
     .replace(/\s+/g, ' ') // Normalize spaces
     .trim()
     .substring(0, MAX_LENGTH);
@@ -27,16 +28,17 @@ function sanitizePlayerName(name) {
     return null;
   }
 
-  return sanitized.length >=2 ? sanitized : null;
+  return sanitized.length >= 2 ? sanitized : null;
 }
 
 function sanitizeOCRText(text) {
   if (!text || typeof text !== 'string') return '';
   
-  // Remove excessive whitespace but keep structure
+  // Preserve Unicode characters (including special chars like Ψ, Ω, etc.)
+  // Only remove control characters but keep printable Unicode
   return text
-    .replace(/\n{3,}/g, '\n\n') // Max2 consecutive newlines
-    .replace(/[^\x20-\x7E\n]/g, '') // Keep only printable ASCII + newlines
+    .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars but keep Unicode
     .trim();
 }
 
