@@ -7,11 +7,12 @@ async function processImage(imageBuffer) {
   try {
     logger.info('OCR', 'Starting Tesseract.js processing...');
 
-    // Preprocess image for better accuracy
+    // Advanced preprocessing for better accuracy
     const processedBuffer = await sharp(imageBuffer)
       .grayscale()
       .normalize()
-      .sharpen()
+      .linear(1.5, 0) // Increase contrast
+      .sharpen({ sigma: 2 })
       .toBuffer();
 
     // Run Tesseract OCR with optimized settings
@@ -21,15 +22,20 @@ async function processImage(imageBuffer) {
           logger.info('OCR', `Progress: ${Math.round(m.progress * 100)}%`);
         }
       },
-      // Preserve special characters
+      // Preserve special characters and spaces
       preserve_interword_spaces: '1',
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ΨΩΣαβγδεζηθικλμνξοπρστυφχψω'
+      // Allow all characters including Greek
+      tessedit_char_whitelist: '',
+      // Use LSTM engine for better accuracy
+      tessedit_ocr_engine_mode: '1',
+      // Treat image as single text block
+      tessedit_pageseg_mode: '6'
     });
 
     logger.info('OCR', 'Text extracted successfully', { 
       length: text.length, 
       confidence,
-      text: text.substring(0, 300) 
+      text: text.substring(0, 500) 
     });
 
     const extractedData = parseText(text);
