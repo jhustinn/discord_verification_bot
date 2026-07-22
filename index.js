@@ -16,6 +16,19 @@ const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const express = require('express');
 
+// ─── Environment Variable Validation ─────────────────────────────────────────
+const requiredEnvVars = [
+  'DISCORD_TOKEN',
+  'SUPABASE_URL',
+  'SUPABASE_KEY'
+];
+
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingEnvVars.length >0) {
+  console.error('[Startup] Missing required environment variables:', missingEnvVars);
+  console.error('[Startup] Please set these in your .env file or Replit Secrets');
+}
+
 // ─── Supabase Client ──────────────────────────────────────────────────────────
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
@@ -31,6 +44,97 @@ const client = new Client({
 
 // ─── Active Ticket Tracking ───────────────────────────────────────────────────
 const activeTickets = new Map(); // userId -> channelId
+
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+const verificationAttempts = new Map(); // userId -> { count, lastAttempt }
+const RATE_LIMIT = {
+  maxAttempts: 3, // Max attempts per window
+  windowMs:24 *60*60*1000, //24 hours
+  cooldownMs:60*1000 //1 minute between attempts
+};
+
+// ─── Security Constants ───────────────────────────────────────────────────────
+const SECURITY = {
+  maxFileSize:5*1024*1024, //5MB
+  allowedTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'],
+  maxNameLength:50,
+  minNameLength:2
+};
+
+// ─── Rate Limit Check Function ────────────────────────────────────────────────
+function checkRateLimit(userId) {
+  const now = Date.now();
+  const userAttempts = verificationAttempts.get(userId);
+
+  if (!userAttempts) {
+    return { allowed: true };
+  }
+
+  // Check if cooldown period has passed
+  if (now - userAttempts.lastAttempt < SECURITY.cooldownMs) {
+    const remaining = Math.ceil((SECURITY.cooldownMs - (now - userAttempts.lastAttempt)) /1000);
+    return { 
+      allowed: false, 
+      message: `Please wait ${remaining} seconds before trying again.` 
+    };
+  }
+
+  // Check if rate limit exceeded
+  if (userAttempts.count >= RATE_LIMIT.maxAttempts) {
+    const timeLeft = Math.ceil((RATE_LIMIT.windowMs - (now - userAttempts.lastAttempt)) / (60*60*1000));
+    return { 
+      allowed: false, 
+      message: `Rate limit exceeded. Try again in ${timeLeft} hours.` 
+    };
+  }
+
+  return { allowed: true };
+}
+
+// ─── Update Rate Limit ────────────────────────────────────────────────────────
+function updateRateLimit(userId) {
+  const now = Date.now();
+  const userAttempts = verificationAttempts.get(userId);
+
+  if (!userAttempts) {
+    verificationAttempts.set(userId, { count:1, lastAttempt: now });
+  } else {
+    userAttempts.count +=1;
+    userAttempts.lastAttempt = now;
+  }
+}
+
+// ─── Input Sanitization ──────────────────────────────────────────────────────
+function sanitizeInput(input) {
+  if (!input || typeof input !== 'string') return '';
+  
+  return input
+    .replace(/[<>]/g, '') // Remove HTML tags
+    .replace(/['"]/g, '') // Remove quotes
+    .replace(/[;\\]/g, '') // Remove injection chars
+    .trim()
+    .substring(0, SECURITY.maxNameLength);
+}
+
+// ─── Validate File ────────────────────────────────────────────────────────────
+function validateFile(attachment) {
+  const errors = [];
+
+  // Check file size
+  if (attachment.size > SECURITY.maxFileSize) {
+    errors.push(`File too large. Maximum size is ${SECURITY.maxFileSize / (1024*1024)}MB.`);
+  }
+
+  // Check file type
+  if (!SECURITY.allowedTypes.includes(attachment.contentType)) {
+    errors.push('Invalid file type. Allowed: PNG, JPG, GIF, WEBP.');
+  }
+
+  return {
+    valid: errors.length ===0,
+    errors
+  };
+}
 
 // ─── OCR Processing Function ──────────────────────────────────────────────────
 async function processImageOCR(imageBuffer) {
@@ -366,8 +470,38 @@ async function processVerification(message) {
   const user = message.author;
   const channel = message.channel;
 
+  // Check rate limit
+  const rateLimitCheck = checkRateLimit(user.id);
+  if (!rateLimitCheck.allowed) {
+    const rateLimitEmbed = new EmbedBuilder()
+      .setColor('#ED4245')
+      .setTitle('Rate Limited')
+      .setDescription(rateLimitCheck.message)
+      .setTimestamp();
+    await message.reply({ embeds: [rateLimitEmbed] });
+    return;
+  }
+
+  // Check for existing pending ticket
+  const { data: existingTicket } = await supabase
+    .from('verification_tickets')
+    .select('ticket_id')
+    .eq('user_id', user.id)
+    .eq('ticket_status', 'PENDING')
+    .single();
+
+  if (existingTicket) {
+    const duplicateEmbed = new EmbedBuilder()
+      .setColor('#ED4245')
+      .setTitle('Duplicate Submission')
+      .setDescription('You already have a pending verification ticket. Please wait for it to be processed.')
+      .setTimestamp();
+    await message.reply({ embeds: [duplicateEmbed] });
+    return;
+  }
+
   // Validate attachment exists
-  if (message.attachments.size === 0) {
+  if (message.attachments.size ===0) {
     const promptEmbed = new EmbedBuilder()
       .setColor('#ED4245')
       .setTitle('Screenshot Required')
@@ -379,17 +513,20 @@ async function processVerification(message) {
 
   const attachment = message.attachments.first();
 
-  // Validate file type
-  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
-  if (!validTypes.includes(attachment.contentType)) {
-    const typeEmbed = new EmbedBuilder()
+  // Validate file
+  const fileValidation = validateFile(attachment);
+  if (!fileValidation.valid) {
+    const errorEmbed = new EmbedBuilder()
       .setColor('#ED4245')
-      .setTitle('Invalid File Type')
-      .setDescription('Please upload an image file (PNG, JPG, GIF, or WEBP).')
+      .setTitle('Invalid File')
+      .setDescription(fileValidation.errors.join('\n'))
       .setTimestamp();
-    await message.reply({ embeds: [typeEmbed] });
+    await message.reply({ embeds: [errorEmbed] });
     return;
   }
+
+  // Update rate limit
+  updateRateLimit(user.id);
 
   // Send processing indicator
   const processingEmbed = new EmbedBuilder()
@@ -443,7 +580,13 @@ async function processVerification(message) {
     if (userError) throw new Error(`User record failed: ${userError.message}`);
 
     // 6. Insert verification ticket with OCR data
-    const inGameName = message.content?.trim() || ocrResult.data?.playerName || 'N/A - Omitted Text';
+    const inGameName = sanitizeInput(message.content) || ocrResult.data?.playerName || 'N/A - Omitted Text';
+
+    // Validate extracted data
+    const playerLevel = ocrResult.data?.playerLevel;
+    if (playerLevel && (playerLevel <1 || playerLevel >100)) {
+      console.warn('[OCR] Invalid level detected:', playerLevel);
+    }
 
     const ticketData = {
       user_id: user.id,
@@ -451,8 +594,8 @@ async function processVerification(message) {
       permanent_image_url: publicURL,
       extracted_text: ocrResult.rawText || null,
       player_id: ocrResult.data?.playerId || null,
-      player_name: ocrResult.data?.playerName || null,
-      player_level: ocrResult.data?.playerLevel || null
+      player_name: sanitizeInput(ocrResult.data?.playerName) || null,
+      player_level: (playerLevel >=1 && playerLevel <=100) ? playerLevel : null
     };
 
     const { error: ticketError } = await supabase
