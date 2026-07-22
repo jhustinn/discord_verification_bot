@@ -116,7 +116,8 @@ function parseExtractedText(text) {
     }
 
     // Player Name patterns - look for name in brackets like [ARIES] Solo_plyr4xx
-    const bracketNameMatch = line.match(/\[([^\]]+)\]\s*(.+)/);
+    // Handle OCR misreads: [ARIES) Solo_plyr4xx or (ARIES) Solo_plyr4xx
+    const bracketNameMatch = line.match(/[\[\(]([^\]\)]+)[\]\)]\s*(.+)/);
     if (bracketNameMatch) {
       const clanTag = bracketNameMatch[1].trim();
       let rawName = bracketNameMatch[2].trim();
@@ -124,9 +125,11 @@ function parseExtractedText(text) {
       // Clean up the name - remove trailing [#], #4, etc.
       rawName = rawName.replace(/\s*\[#\d*\]\s*$/, '').trim();
       // Remove trailing special characters
-      rawName = rawName.replace(/\s*[#\[\]]+\s*$/, '').trim();
+      rawName = rawName.replace(/\s*[#\[\]\(\)]+\s*$/, '').trim();
       
-      if (rawName.length > 2) {
+      // Skip if name is too short or looks like UI element
+      if (rawName.length > 3 && 
+          !['Back', 'Title', 'Level', 'Showcase', 'Academy'].includes(rawName)) {
         playerName = rawName;
         console.log('[OCR] Found Clan Tag:', clanTag);
         console.log('[OCR] Found Player Name:', playerName);
