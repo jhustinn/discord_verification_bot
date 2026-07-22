@@ -52,5 +52,8 @@ module.exports = {
   PORT: parseInt(process.env.PORT) ||3000,
   
   // OCR
-  OCR_API_KEY: process.env.OCR_API_KEY || 'helloworld'
+  OCR_API_KEY: process.env.OCR_API_KEY || 'helloworld',
+
+  // API Security
+  API_SECRET_KEY: process.env.API_SECRET_KEY || 'aries-admin-2024'
 };

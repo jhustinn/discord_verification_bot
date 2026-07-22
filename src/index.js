@@ -3,11 +3,13 @@ require('dotenv').config();
 
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
+const cors = require('cors');
 const config = require('./config');
 const logger = require('./utils/logger');
 const commandHandler = require('./handlers/commands');
 const interactionHandler = require('./handlers/interactions');
 const messageHandler = require('./handlers/messages');
+const { createDiscordRouter } = require('./handlers/discordApi');
 
 // ─── Validate Environment ─────────────────────────────────────────────────────
 config.validateEnv();
@@ -29,6 +31,16 @@ const activeTickets = new Map();
 function startKeepAliveServer() {
   const app = express();
 
+  // CORS for admin dashboard
+  app.use(cors({
+    origin: ['https://aries-verification-admin.vercel.app', 'http://localhost:5173'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'x-api-key']
+  }));
+
+  app.use(express.json());
+
+  // Health check
   app.get('/', (req, res) => {
     res.json({
       status: 'online',
@@ -38,8 +50,12 @@ function startKeepAliveServer() {
     });
   });
 
+  // Discord API routes
+  app.use('/api/discord', createDiscordRouter(client));
+
   app.listen(config.PORT, () => {
     logger.info('Server', `Listening on port ${config.PORT}`);
+    logger.info('Server', 'Discord API available at /api/discord/*');
   });
 }
 
