@@ -1,7 +1,7 @@
 // ─── Message Handlers ─────────────────────────────────────────────────────────
 const { EmbedBuilder } = require('discord.js');
 const config = require('../config');
-const ocrService = require('../services/ocr');
+const ocrService = require('../services/ocr-tesseract');
 const database = require('../services/database');
 const storage = require('../services/storage');
 const rateLimiter = require('../utils/rateLimiter');
