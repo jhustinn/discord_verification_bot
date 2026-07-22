@@ -15,6 +15,8 @@ const {
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const express = require('express');
+const Tesseract = require('tesseract.js');
+const sharp = require('sharp');
 
 // ─── Supabase Client ──────────────────────────────────────────────────────────
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -31,6 +33,117 @@ const client = new Client({
 
 // ─── Active Ticket Tracking ───────────────────────────────────────────────────
 const activeTickets = new Map(); // userId -> channelId
+
+// ─── OCR Processing Function ──────────────────────────────────────────────────
+async function processImageOCR(imageBuffer) {
+  try {
+    console.log('[OCR] Starting image preprocessing...');
+
+    // Preprocess image for better OCR accuracy
+    const processedBuffer = await sharp(imageBuffer)
+      .grayscale()
+      .contrast(1.5)
+      .resize({ width: 1200, withoutEnlargement: true })
+      .sharpen()
+      .toBuffer();
+
+    console.log('[OCR] Starting Tesseract recognition...');
+
+    // Run Tesseract OCR
+    const { data: { text } } = await Tesseract.recognize(processedBuffer, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          console.log(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
+        }
+      }
+    });
+
+    console.log('[OCR] Raw extracted text:', text);
+
+    // Parse extracted text for Modern Warships data
+    const extractedData = parseExtractedText(text);
+
+    return {
+      success: true,
+      rawText: text,
+      data: extractedData
+    };
+  } catch (error) {
+    console.error('[OCR] Processing error:', error.message);
+    return {
+      success: false,
+      rawText: '',
+      data: null,
+      error: error.message
+    };
+  }
+}
+
+// ─── Parse Extracted Text ─────────────────────────────────────────────────────
+function parseExtractedText(text) {
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+  let playerId = null;
+  let playerName = null;
+  let playerLevel = null;
+
+  // Pattern matching for Modern Warships
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].toLowerCase();
+
+    // Player ID patterns (usually 6-10 digits)
+    const idMatch = lines[i].match(/(?:id|player\s*id)[:\s]*(\d{6,12})/i);
+    if (idMatch) {
+      playerId = idMatch[1];
+    }
+
+    // Also check for standalone numbers that could be ID
+    if (!playerId) {
+      const standaloneNumber = lines[i].match(/^(\d{6,12})$/);
+      if (standaloneNumber && i > 0) {
+        playerId = standaloneNumber[1];
+      }
+    }
+
+    // Player Name patterns
+    if (line.includes('commander') || line.includes('player') || line.includes('name')) {
+      const nameMatch = lines[i].match(/(?:commander|player|name)[:\s]*(.+)/i);
+      if (nameMatch) {
+        playerName = nameMatch[1].trim();
+      }
+    }
+
+    // Level patterns
+    const levelMatch = lines[i].match(/(?:lvl|level)[:\s]*(\d{1,3})/i);
+    if (levelMatch) {
+      playerLevel = parseInt(levelMatch[1]);
+    }
+
+    // Also look for "LVL XX" pattern
+    const lvlMatch = lines[i].match(/LVL\s*(\d{1,3})/i);
+    if (lvlMatch) {
+      playerLevel = parseInt(lvlMatch[1]);
+    }
+  }
+
+  // Fallback: If no name found, use first non-empty line that's not a number
+  if (!playerName) {
+    for (const line of lines) {
+      if (line.length > 2 && !/^\d+$/.test(line) && !line.includes('LVL') && !line.includes('Level')) {
+        playerName = line;
+        break;
+      }
+    }
+  }
+
+  return {
+    playerId,
+    playerName,
+    playerLevel,
+    linesCount: lines.length,
+    confidence: playerId ? 'high' : playerName ? 'medium' : 'low'
+  };
+}
 
 // ─── Keep-Alive Server ────────────────────────────────────────────────────────
 function startKeepAliveServer() {
@@ -231,11 +344,17 @@ async function processVerification(message) {
     const imageResponse = await axios.get(attachment.url, { responseType: 'arraybuffer' });
     const fileExtension = attachment.name.split('.').pop();
     const targetPath = `${user.id}-${Date.now()}.${fileExtension}`;
+    const imageBuffer = Buffer.from(imageResponse.data);
 
-    // 2. Upload to Supabase Storage
+    // 2. Process OCR on image
+    console.log('[OCR] Processing image for text extraction...');
+    const ocrResult = await processImageOCR(imageBuffer);
+    console.log('[OCR] Result:', ocrResult);
+
+    // 3. Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('verification-attachments')
-      .upload(targetPath, Buffer.from(imageResponse.data), {
+      .upload(targetPath, imageBuffer, {
         contentType: attachment.contentType,
         upsert: true
       });
@@ -243,7 +362,7 @@ async function processVerification(message) {
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
     console.log('[Upload] Success:', uploadData);
 
-    // 3. Get public URL (v1 API)
+    // 4. Get public URL (v1 API)
     const { publicURL, error: urlError } = supabase.storage
       .from('verification-attachments')
       .getPublicUrl(targetPath);
@@ -253,7 +372,7 @@ async function processVerification(message) {
 
     if (!publicURL) throw new Error('Public URL is null');
 
-    // 4. Upsert user record
+    // 5. Upsert user record
     const { error: userError } = await supabase
       .from('discord_users')
       .upsert({
@@ -263,20 +382,35 @@ async function processVerification(message) {
 
     if (userError) throw new Error(`User record failed: ${userError.message}`);
 
-    // 5. Insert verification ticket
-    const inGameName = message.content?.trim() || 'N/A - Omitted Text';
+    // 6. Insert verification ticket with OCR data
+    const inGameName = message.content?.trim() || ocrResult.data?.playerName || 'N/A - Omitted Text';
+
+    const ticketData = {
+      user_id: user.id,
+      in_game_name: inGameName,
+      permanent_image_url: publicURL,
+      extracted_text: ocrResult.rawText || null,
+      player_id: ocrResult.data?.playerId || null,
+      player_name: ocrResult.data?.playerName || null,
+      player_level: ocrResult.data?.playerLevel || null
+    };
 
     const { error: ticketError } = await supabase
       .from('verification_tickets')
-      .insert({
-        user_id: user.id,
-        in_game_name: inGameName,
-        permanent_image_url: publicURL
-      });
+      .insert(ticketData);
 
     if (ticketError) throw new Error(`Ticket insert failed: ${ticketError.message}`);
 
-    // 6. Send success confirmation
+    // 7. Send success confirmation with OCR data
+    let ocrInfo = '';
+    if (ocrResult.success && ocrResult.data) {
+      ocrInfo = '\n\n**Auto-Extracted Data:**\n';
+      ocrInfo += `- Player ID: ${ocrResult.data.playerId || 'Not detected'}\n`;
+      ocrInfo += `- Player Name: ${ocrResult.data.playerName || 'Not detected'}\n`;
+      ocrInfo += `- Level: ${ocrResult.data.playerLevel || 'Not detected'}\n`;
+      ocrInfo += `- Confidence: ${ocrResult.data.confidence}`;
+    }
+
     const successEmbed = new EmbedBuilder()
       .setColor('#3ecf8e')
       .setTitle('Verification Submitted')
@@ -284,15 +418,15 @@ async function processVerification(message) {
         'Your verification data has been stored successfully.\n\n' +
         `**In-Game Name:** ${inGameName}\n` +
         `**Screenshot:** [View File](${publicURL})\n` +
-        `**Status:** PENDING\n\n` +
-        'A moderator will review your submission shortly.'
+        `**Status:** PENDING` +
+        ocrInfo
       )
       .setFooter({ text: 'You will be notified when your verification is processed' })
       .setTimestamp();
 
     await processingMsg.edit({ embeds: [successEmbed] });
 
-    // 7. Optionally assign verified role (if configured and auto-approve is desired)
+    // 8. Optionally assign verified role (if configured and auto-approve is desired)
     if (process.env.VERIFIED_ROLE_ID) {
       try {
         const member = await message.guild.members.fetch(user.id);
@@ -302,7 +436,7 @@ async function processVerification(message) {
       }
     }
 
-    console.log(`[Verification] ${user.tag} submitted successfully`);
+    console.log(`[Verification] ${user.tag} submitted successfully with OCR data`);
 
   } catch (err) {
     console.error('[Verification] Processing error:', err.message);
