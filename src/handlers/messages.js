@@ -1,20 +1,13 @@
 // ─── Message Handlers ─────────────────────────────────────────────────────────
 const { EmbedBuilder } = require('discord.js');
 const config = require('../config');
-const ocrGoogle = require('../services/ocr-google');
-const ocrSpace = require('../services/ocr');
+const ocrService = require('../services/ocr');
 const database = require('../services/database');
 const storage = require('../services/storage');
 const rateLimiter = require('../utils/rateLimiter');
 const validator = require('../utils/validator');
 const sanitizer = require('../utils/sanitizer');
 const logger = require('../utils/logger');
-
-// Choose OCR service based on available credentials
-const useGoogleVision = !!process.env.GOOGLE_CREDENTIALS;
-const ocrService = useGoogleVision ? ocrGoogle : ocrSpace;
-
-logger.info('OCR', `Using ${useGoogleVision ? 'Google Cloud Vision' : 'OCR.space'} for text extraction`);
 
 async function processVerification(message) {
   const user = message.author;
