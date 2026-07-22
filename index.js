@@ -41,14 +41,16 @@ async function processImageOCR(imageBuffer) {
     const base64Image = imageBuffer.toString('base64');
     const dataUri = `data:image/png;base64,${base64Image}`;
 
+    // Prepare form data
+    const formData = new URLSearchParams();
+    formData.append('base64Image', dataUri);
+    formData.append('language', 'eng');
+    formData.append('isOverlayRequired', 'false');
+    formData.append('OCREngine', '2');
+
     // Call OCR.space API
     const response = await axios.post('https://api.ocr.space/parse/image', 
-      {
-        base64Image: dataUri,
-        language: 'eng',
-        isOverlayRequired: false,
-        OCREngine: '2' // Engine2 lebih akurat
-      },
+      formData.toString(),
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
