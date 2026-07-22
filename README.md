@@ -1,45 +1,144 @@
-# Discord Verification Bot
+# MW Verification Bot
 
-Automated verification & ticketing system for Discord servers with Supabase backend.
+Discord Automated Verification & Ticketing System for Modern Warships.
 
-## Setup
+## Features
 
-### 1. Supabase Setup
-1. Go to your Supabase project dashboard
-2. Navigate to **SQL Editor** and run `schema.sql`
-3. Go to **Storage** and create a bucket named `verification-attachments` (set to public)
-4. Go to **Project Settings > API** and copy:
-   - `Project URL` (already set in `.env`)
-   - `anon` public key OR `service_role` secret key (recommended for full access)
+- 🎫 Automated verification ticket creation
+- 🔍 OCR extraction (Player ID, Name, Level)
+- ☁️ Supabase cloud storage
+- 🔒 Rate limiting & security
+- 📊 Statistics dashboard
 
-### 2. Discord Bot Setup
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application and bot
-3. Enable these intents:
-   - `SERVER MEMBERS INTENT`
-   - `MESSAGE CONTENT INTENT`
-4. Copy the bot token
+## Project Structure
 
-### 3. Configure `.env`
-Edit `.env` and fill in:
-- `DISCORD_TOKEN` - Your Discord bot token
-- `SUPABASE_KEY` - Your Supabase anon key (or service_role key for full access)
-- `WELCOME_CHANNEL_ID` - Right-click channel > Copy ID
-- `TICKET_CATEGORY_ID` - Right-click category > Copy ID
-- `VERIFIED_ROLE_ID` - (Optional) Right-click role > Copy ID
+```
+discord-verification-bot/
+├── src/
+│   ├── config/
+│   │   ├── index.js          # Environment configuration
+│   │   └── supabase.js       # Supabase client
+│   ├── services/
+│   │   ├── ocr.js            # OCR processing (OCR.space)
+│   │   ├── database.js       # Database operations
+│   │   └── storage.js        # File storage operations
+│   ├── handlers/
+│   │   ├── commands.js       # Slash command handlers
+│   │   ├── interactions.js   # Button interaction handlers
+│   │   └── messages.js       # Message handlers
+│   ├── utils/
+│   │   ├── rateLimiter.js    # Rate limiting
+│   │   ├── validator.js      # Input validation
+│   │   ├── sanitizer.js      # Input sanitization
+│   │   └── logger.js         # Logging utility
+│   └── index.js              # Main entry point
+├── .env.example
+├── .gitignore
+├── package.json
+├── ROADMAP.md
+└── README.md
+```
 
-### 4. Run
+## Prerequisites
+
+- Node.js 18+
+- Discord Bot Token
+- Supabase Account
+
+## Installation
+
+1. Clone repository:
+```bash
+git clone https://github.com/jhustinn/discord_verification_bot.git
+cd discord_verification_bot
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Create `.env` file:
+```bash
+cp .env.example .env
+```
+
+4. Configure environment variables in `.env`
+
+5. Run database migration in Supabase SQL Editor:
+```sql
+CREATE TABLE IF NOT EXISTS discord_users (
+    user_id VARCHAR PRIMARY KEY,
+    username VARCHAR NOT NULL,
+    joined_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS verification_tickets (
+    ticket_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR REFERENCES discord_users(user_id) ON DELETE CASCADE,
+    in_game_name VARCHAR NOT NULL,
+    permanent_image_url TEXT NOT NULL,
+    ticket_status VARCHAR DEFAULT 'PENDING',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    player_id VARCHAR,
+    player_name VARCHAR,
+    player_level INTEGER,
+    extracted_text TEXT
+);
+```
+
+6. Create Supabase Storage bucket named `verification-attachments` (public)
+
+7. Start bot:
 ```bash
 npm start
 ```
 
-### 5. Deploy Commands
-In Discord, type `/verify-panel` in your welcome channel to post the verification panel.
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DISCORD_TOKEN` | Yes | Discord bot token |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_KEY` | Yes | Supabase service role key |
+| `TICKET_CATEGORY_ID` | No | Category ID for tickets |
+| `VERIFIED_ROLE_ID` | No | Role ID to assign after verification |
+| `PORT` | No | Server port (default:3000) |
+| `GUILD_ID` | No | Guild ID for instant commands |
+| `OCR_API_KEY` | No | OCR.space API key |
 
 ## Commands
-- `/verify-panel` - Post verification panel (Admin only)
-- `/verify-close` - Close current ticket
-- `/verify-stats` - View statistics (Admin only)
 
-## Keep-Alive (for free hosting)
-The bot includes an Express server on port 8080. Use UptimeRobot to ping `https://your-service.onrender.com/` every 5 minutes to prevent sleep.
+| Command | Permission | Description |
+|---------|------------|-------------|
+| `/verify-panel` | Administrator | Post verification panel |
+| `/verify-close` | Manage Channels | Close current ticket |
+| `/verify-stats` | Administrator | View statistics |
+
+## Security Features
+
+- ✅ Rate limiting (3 attempts/24h)
+- ✅ File size validation (max5MB)
+- ✅ Duplicate submission prevention
+- ✅ Input sanitization
+- ✅ Environment variable validation
+
+## Deployment
+
+### Replit
+1. Push to GitHub
+2. Import in Replit
+3. Add Secrets (environment variables)
+4. Run `npm start`
+5. Setup UptimeRobot for keep-alive
+
+### Vercel (Frontend)
+See `discord-verification-frontend` repository.
+
+## Versioning
+
+See [ROADMAP.md](ROADMAP.md) for version history and planned features.
+
+## License
+
+MIT
