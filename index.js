@@ -87,62 +87,94 @@ function parseExtractedText(text) {
   let playerName = null;
   let playerLevel = null;
 
+  console.log('[OCR] Parsing lines:', lines);
+
   // Pattern matching for Modern Warships
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].toLowerCase();
+    const line = lines[i];
+    const lowerLine = line.toLowerCase();
 
-    // Player ID patterns (usually 6-10 digits)
-    const idMatch = lines[i].match(/(?:id|player\s*id)[:\s]*(\d{6,12})/i);
-    if (idMatch) {
-      playerId = idMatch[1];
+    // Player ID patterns (hex format like 201F540F07A33955)
+    const hexIdMatch = line.match(/Player\s*ID\s*([0-9A-Fa-f]{8,16})/i);
+    if (hexIdMatch) {
+      playerId = hexIdMatch[1];
+      console.log('[OCR] Found Player ID (hex):', playerId);
     }
 
-    // Also check for standalone numbers that could be ID
-    if (!playerId) {
-      const standaloneNumber = lines[i].match(/^(\d{6,12})$/);
-      if (standaloneNumber && i > 0) {
-        playerId = standaloneNumber[1];
+    // Also try decimal ID format
+    const decimalIdMatch = line.match(/(?:id|player\s*id)[:\s]*(\d{6,12})/i);
+    if (decimalIdMatch && !playerId) {
+      playerId = decimalIdMatch[1];
+      console.log('[OCR] Found Player ID (decimal):', playerId);
+    }
+
+    // Player Name patterns - look for name in brackets like [ARIES] Solo_plyr4xx
+    const bracketNameMatch = line.match(/\[.*?\]\s*(.+)/);
+    if (bracketNameMatch) {
+      playerName = bracketNameMatch[1].trim();
+      console.log('[OCR] Found Player Name (bracket):', playerName);
+    }
+
+    // Also try "COMMANDER" or other patterns
+    if (!playerName) {
+      const commanderMatch = line.match(/(?:commander|player|name)[:\s]*(.+)/i);
+      if (commanderMatch) {
+        playerName = commanderMatch[1].trim();
+        console.log('[OCR] Found Player Name (commander):', playerName);
       }
     }
 
-    // Player Name patterns
-    if (line.includes('commander') || line.includes('player') || line.includes('name')) {
-      const nameMatch = lines[i].match(/(?:commander|player|name)[:\s]*(.+)/i);
-      if (nameMatch) {
-        playerName = nameMatch[1].trim();
-      }
+    // Level patterns - look for "39 Level" or "Level 39"
+    const levelMatch1 = line.match(/(\d{1,3})\s*Level/i);
+    if (levelMatch1) {
+      playerLevel = parseInt(levelMatch1[1]);
+      console.log('[OCR] Found Level (number Level):', playerLevel);
     }
 
-    // Level patterns
-    const levelMatch = lines[i].match(/(?:lvl|level)[:\s]*(\d{1,3})/i);
-    if (levelMatch) {
-      playerLevel = parseInt(levelMatch[1]);
+    const levelMatch2 = line.match(/Level\s*(\d{1,3})/i);
+    if (levelMatch2 && !playerLevel) {
+      playerLevel = parseInt(levelMatch2[1]);
+      console.log('[OCR] Found Level (Level number):', playerLevel);
     }
 
-    // Also look for "LVL XX" pattern
-    const lvlMatch = lines[i].match(/LVL\s*(\d{1,3})/i);
-    if (lvlMatch) {
+    // Also try LVL pattern
+    const lvlMatch = line.match(/LVL\s*(\d{1,3})/i);
+    if (lvlMatch && !playerLevel) {
       playerLevel = parseInt(lvlMatch[1]);
+      console.log('[OCR] Found Level (LVL):', playerLevel);
     }
   }
 
-  // Fallback: If no name found, use first non-empty line that's not a number
+  // Fallback: If no name found, look for lines that look like player names
   if (!playerName) {
     for (const line of lines) {
-      if (line.length > 2 && !/^\d+$/.test(line) && !line.includes('LVL') && !line.includes('Level')) {
+      // Skip lines that are just numbers, titles, or UI elements
+      if (line.length > 3 && 
+          !/^\d+$/.test(line) && 
+          !line.includes('Level') && 
+          !line.includes('LVL') &&
+          !line.includes('Player ID') &&
+          !line.includes('STATISTICS') &&
+          !line.includes('ACHIEVEMENTS') &&
+          !line.includes('CLAN') &&
+          !line.includes('RANK')) {
         playerName = line;
+        console.log('[OCR] Found Player Name (fallback):', playerName);
         break;
       }
     }
   }
 
-  return {
+  const result = {
     playerId,
     playerName,
     playerLevel,
     linesCount: lines.length,
     confidence: playerId ? 'high' : playerName ? 'medium' : 'low'
   };
+
+  console.log('[OCR] Final parsed result:', result);
+  return result;
 }
 
 // ─── Keep-Alive Server ────────────────────────────────────────────────────────
