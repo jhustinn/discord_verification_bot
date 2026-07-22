@@ -42,7 +42,7 @@ async function processImageOCR(imageBuffer) {
     // Preprocess image for better OCR accuracy
     const processedBuffer = await sharp(imageBuffer)
       .grayscale()
-      .contrast(1.5)
+      .linear(1.5, 0) // Contrast adjustment (1.5x contrast)
       .resize({ width: 1200, withoutEnlargement: true })
       .sharpen()
       .toBuffer();
