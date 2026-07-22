@@ -15,8 +15,6 @@ const {
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const express = require('express');
-const Tesseract = require('tesseract.js');
-const sharp = require('sharp');
 
 // ─── Supabase Client ──────────────────────────────────────────────────────────
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -37,27 +35,34 @@ const activeTickets = new Map(); // userId -> channelId
 // ─── OCR Processing Function ──────────────────────────────────────────────────
 async function processImageOCR(imageBuffer) {
   try {
-    console.log('[OCR] Starting image preprocessing...');
+    console.log('[OCR] Starting OCR.space processing...');
 
-    // Preprocess image for better OCR accuracy
-    const processedBuffer = await sharp(imageBuffer)
-      .grayscale()
-      .linear(1.5, 0) // Contrast adjustment (1.5x contrast)
-      .resize({ width: 1200, withoutEnlargement: true })
-      .sharpen()
-      .toBuffer();
+    // Convert buffer to base64
+    const base64Image = imageBuffer.toString('base64');
+    const dataUri = `data:image/png;base64,${base64Image}`;
 
-    console.log('[OCR] Starting Tesseract recognition...');
-
-    // Run Tesseract OCR
-    const { data: { text } } = await Tesseract.recognize(processedBuffer, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          console.log(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
+    // Call OCR.space API
+    const response = await axios.post('https://api.ocr.space/parse/image', 
+      {
+        base64Image: dataUri,
+        language: 'eng',
+        isOverlayRequired: false,
+        OCREngine: '2' // Engine2 lebih akurat
+      },
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
         }
       }
-    });
+    );
 
+    console.log('[OCR] OCR.space response:', response.data);
+
+    if (response.data.IsErroredOnProcessing) {
+      throw new Error(response.data.ErrorMessage || 'OCR processing failed');
+    }
+
+    const text = response.data.ParsedResults?.[0]?.ParsedText || '';
     console.log('[OCR] Raw extracted text:', text);
 
     // Parse extracted text for Modern Warships data
