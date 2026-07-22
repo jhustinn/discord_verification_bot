@@ -109,18 +109,27 @@ function parseExtractedText(text) {
     }
 
     // Player Name patterns - look for name in brackets like [ARIES] Solo_plyr4xx
-    const bracketNameMatch = line.match(/\[.*?\]\s*(.+)/);
+    const bracketNameMatch = line.match(/\[([^\]]+)\]\s*(.+)/);
     if (bracketNameMatch) {
-      playerName = bracketNameMatch[1].trim();
-      console.log('[OCR] Found Player Name (bracket):', playerName);
+      const clanTag = bracketNameMatch[1].trim();
+      playerName = bracketNameMatch[2].trim();
+      console.log('[OCR] Found Clan Tag:', clanTag);
+      console.log('[OCR] Found Player Name:', playerName);
     }
 
-    // Also try "COMMANDER" or other patterns
+    // Also try lines that look like player names (contain underscore, mixed case)
     if (!playerName) {
-      const commanderMatch = line.match(/(?:commander|player|name)[:\s]*(.+)/i);
-      if (commanderMatch) {
-        playerName = commanderMatch[1].trim();
-        console.log('[OCR] Found Player Name (commander):', playerName);
+      const playerNameMatch = line.match(/^([A-Za-z][A-Za-z0-9_]{3,20})$/);
+      if (playerNameMatch && 
+          !line.includes('Level') && 
+          !line.includes('LVL') &&
+          !line.includes('Player') &&
+          !line.includes('Title') &&
+          !line.includes('Chief') &&
+          !line.includes('Gold') &&
+          !line.includes('Silver')) {
+        playerName = playerNameMatch[1];
+        console.log('[OCR] Found Player Name (pattern):', playerName);
       }
     }
 
