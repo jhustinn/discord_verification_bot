@@ -56,7 +56,7 @@ async function handleVerifyPanel(interaction) {
 async function handleVerifyClose(interaction, activeTickets) {
   const channel = interaction.channel;
 
-  if (!channel.name.startsWith('verify-')) {
+  if (!channel.name.startsWith('open-ticket-')) {
     await interaction.reply({
       content: 'This command can only be used in verification ticket channels.',
       ephemeral: true
@@ -64,6 +64,7 @@ async function handleVerifyClose(interaction, activeTickets) {
     return;
   }
 
+  // Remove from active tracking
   for (const [userId, channelId] of activeTickets.entries()) {
     if (channelId === channel.id) {
       activeTickets.delete(userId);
@@ -71,9 +72,13 @@ async function handleVerifyClose(interaction, activeTickets) {
     }
   }
 
-  await interaction.reply({ content: 'Closing ticket in5 seconds...' });
+  // Rename channel to closed
+  const closedName = channel.name.replace('open-ticket-', 'closed-ticket-');
+  await channel.setName(closedName);
+
+  await interaction.reply({ content: 'Ticket closed. Channel will be deleted in5 seconds...' });
   setTimeout(() => channel.delete().catch(() => {}),5000);
-  logger.info('Commands', 'Ticket closing', { channel: channel.name });
+  logger.info('Commands', 'Ticket closed', { channel: channel.name });
 }
 
 async function handleVerifyStats(interaction) {

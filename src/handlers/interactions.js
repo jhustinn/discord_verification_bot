@@ -23,7 +23,7 @@ async function handleOpenTicket(interaction, activeTickets, client) {
 
   try {
     const channel = await guild.channels.create({
-      name: `verify-${user.username}`,
+      name: `open-ticket-${user.username}`,
       type: ChannelType.GuildText,
       parent: categoryId || undefined,
       permissionOverwrites: [

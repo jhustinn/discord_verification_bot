@@ -103,7 +103,7 @@ client.on('interactionCreate', async (interaction) => {
 // ─── Event: Message Handler ───────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
-  if (!message.channel.name?.startsWith('verify-')) return;
+  if (!message.channel.name?.startsWith('open-ticket-')) return;
   if (message.attachments.size ===0 && !message.content?.trim()) return;
 
   if (message.attachments.size >0) {
