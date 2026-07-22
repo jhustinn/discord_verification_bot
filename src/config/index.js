@@ -7,6 +7,7 @@ const requiredEnvVars = [
 
 const optionalEnvVars = {
   'TICKET_CATEGORY_ID': null,
+  'CLOSED_CATEGORY_ID': null,
   'VERIFIED_ROLE_ID': null,
   'PORT':3000,
   'GUILD_ID': null,
@@ -46,6 +47,7 @@ module.exports = {
   
   // Bot Config
   TICKET_CATEGORY_ID: process.env.TICKET_CATEGORY_ID,
+  CLOSED_CATEGORY_ID: process.env.CLOSED_CATEGORY_ID,
   VERIFIED_ROLE_ID: process.env.VERIFIED_ROLE_ID,
   PORT: parseInt(process.env.PORT) ||3000,
   

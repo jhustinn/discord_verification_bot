@@ -55,6 +55,7 @@ async function handleVerifyPanel(interaction) {
 
 async function handleVerifyClose(interaction, activeTickets) {
   const channel = interaction.channel;
+  const config = require('../config');
 
   if (!channel.name.startsWith('open-ticket-')) {
     await interaction.reply({
@@ -76,9 +77,28 @@ async function handleVerifyClose(interaction, activeTickets) {
   const closedName = channel.name.replace('open-ticket-', 'closed-ticket-');
   await channel.setName(closedName);
 
-  await interaction.reply({ content: 'Ticket closed. Channel will be deleted in5 seconds...' });
-  setTimeout(() => channel.delete().catch(() => {}),5000);
-  logger.info('Commands', 'Ticket closed', { channel: channel.name });
+  // Move to closed category if configured
+  if (config.CLOSED_CATEGORY_ID) {
+    try {
+      await channel.setParent(config.CLOSED_CATEGORY_ID);
+      logger.info('Commands', 'Ticket moved to closed category', { channel: closedName });
+    } catch (err) {
+      logger.warn('Commands', 'Could not move to closed category', { error: err.message });
+    }
+  }
+
+  // Remove send permissions for user
+  const permissionOverwrites = channel.permissionOverwrites.cache;
+  for (const [id, overwrite] of permissionOverwrites) {
+    if (id !== interaction.guild.id && id !== interaction.client.user.id) {
+      await channel.permissionOverwrites.edit(id, {
+        SendMessages: false
+      });
+    }
+  }
+
+  await interaction.reply({ content: 'Ticket closed and archived.' });
+  logger.info('Commands', 'Ticket closed', { channel: closedName });
 }
 
 async function handleVerifyStats(interaction) {
