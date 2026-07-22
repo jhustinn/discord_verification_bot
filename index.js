@@ -112,9 +112,18 @@ function parseExtractedText(text) {
     const bracketNameMatch = line.match(/\[([^\]]+)\]\s*(.+)/);
     if (bracketNameMatch) {
       const clanTag = bracketNameMatch[1].trim();
-      playerName = bracketNameMatch[2].trim();
-      console.log('[OCR] Found Clan Tag:', clanTag);
-      console.log('[OCR] Found Player Name:', playerName);
+      let rawName = bracketNameMatch[2].trim();
+      
+      // Clean up the name - remove trailing [#], #4, etc.
+      rawName = rawName.replace(/\s*\[#\d*\]\s*$/, '').trim();
+      // Remove trailing special characters
+      rawName = rawName.replace(/\s*[#\[\]]+\s*$/, '').trim();
+      
+      if (rawName.length > 2) {
+        playerName = rawName;
+        console.log('[OCR] Found Clan Tag:', clanTag);
+        console.log('[OCR] Found Player Name:', playerName);
+      }
     }
 
     // Also try lines that look like player names (contain underscore, mixed case)
