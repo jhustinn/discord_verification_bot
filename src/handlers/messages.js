@@ -1,13 +1,20 @@
 // ─── Message Handlers ─────────────────────────────────────────────────────────
 const { EmbedBuilder } = require('discord.js');
 const config = require('../config');
-const ocrService = require('../services/ocr');
+const ocrGemini = require('../services/ocr-gemini');
+const ocrSpace = require('../services/ocr');
 const database = require('../services/database');
 const storage = require('../services/storage');
 const rateLimiter = require('../utils/rateLimiter');
 const validator = require('../utils/validator');
 const sanitizer = require('../utils/sanitizer');
 const logger = require('../utils/logger');
+
+// Choose OCR service based on available credentials
+const useGemini = !!process.env.GEMINI_API_KEY;
+const ocrService = useGemini ? ocrGemini : ocrSpace;
+
+logger.info('OCR', `Using ${useGemini ? 'Gemini Vision' : 'OCR.space'} for text extraction`);
 
 async function processVerification(message) {
   const user = message.author;
